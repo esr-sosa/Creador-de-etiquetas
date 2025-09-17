@@ -1,4 +1,4 @@
-# app.py - VERSIÓN DISEÑO RECTANGULAR PROFESIONAL
+# app.py - VERSIÓN FINAL CON CUADRO DE TEXTO Y DISEÑO PROFESIONAL
 import os
 import re
 import uuid
@@ -6,177 +6,136 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
-from reportlab.lib.colors import HexColor, black
+from reportlab.lib.colors import HexColor
 from pdf2image import convert_from_path
 
 # --- CONFIGURACIÓN DE FLASK ---
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['UPLOAD_FOLDER'] = 'uploads' # Aunque no subimos, la usamos para archivos temporales
 app.config['GENERATED_FOLDER'] = 'generated'
-
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['GENERATED_FOLDER'], exist_ok=True)
 
-# --- FUNCIÓN DE PARSEO (TRADUCTOR) DE ALTA PRECISIÓN ---
-def parse_3utools_report(file_path):
-    """
-    Función de parseo final. Utiliza regex para extraer los datos de
-    forma precisa sin importar los espacios o saltos de línea.
-    """
-    try:
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
-    except FileNotFoundError:
-        return None
+# --- DICCIONARIO PARA TRADUCIR CÓDIGOS DE MODELO ---
+PRODUCT_TYPE_MAP = {
+    "iPhone13,2": "iPhone 12",
+    "iPhone13,1": "iPhone 12 Mini",
+    "iPhone13,3": "iPhone 12 Pro",
+    "iPhone13,4": "iPhone 12 Pro Max",
+    # Agrega más modelos aquí si es necesario
+}
 
+# --- FUNCIÓN DE PARSEO (TRADUCTOR) PARA EL TEXTO PEGADO ---
+def parse_info(text_content):
+    """
+    Parsea el texto pegado desde el informe de dispositivo de 3uTools.
+    """
     data = {
-        'model': 'N/A',
-        'color': 'N/A',
-        'capacity': 'N/A',
-        'serial': 'N/A',
-        'battery_life': 'N/A',
-        'imei': 'N/A' # El reporte de 3uTools no parece incluir el IMEI
+        'model': 'N/A', 'color': 'N/A', 'capacity': 'N/A',
+        'serial': 'N/A', 'battery_life': 'N/A', 'imei': 'N/A'
     }
 
-    # Regex para Modelo: Busca "Device Model" y captura el texto hasta la siguiente palabra "Normal"
-    model_match = re.search(r"Device Model\s+(.*?)\s+Normal", content, re.DOTALL)
-    if model_match:
-        # De las líneas capturadas, tomamos la que contiene "iPhone"
-        for line in model_match.group(1).splitlines():
-            if "iPhone" in line:
-                data['model'] = line.strip()
-                break
+    # Función auxiliar para buscar valores
+    def find_value(key):
+        match = re.search(fr"^{key}\s+(.+)$", text_content, re.MULTILINE)
+        return match.group(1).strip() if match else 'N/A'
 
-    # Regex para Color: Busca "Device Color" y captura el texto hasta la siguiente "Normal"
-    color_match = re.search(r"Device Color\s+(.*?)\s+Normal", content, re.DOTALL)
-    if color_match:
-        color_text = color_match.group(1).replace("\n", " ").replace("，", ", ")
-        # Limpieza final del texto de color
-        color_text = re.sub(r'\s{2,}', ' ', color_text).strip()
-        data['color'] = color_text.replace("Front Black, Rear (PRODUCT)RED", "Rojo (PRODUCT)RED")
+    # Extracción de datos
+    product_type = find_value("ProductType")
+    data['model'] = PRODUCT_TYPE_MAP.get(product_type, product_type) # Traduce el código a nombre
+    data['serial'] = find_value("SerialNumber")
+    data['imei'] = find_value("InternationalMobileEquipmentIdentity")
+    
+    # El color se infiere por códigos. '1' es usualmente Negro/Gris Espacial/etc.
+    color_code = find_value("DeviceColor")
+    if color_code == '1':
+        data['color'] = "Negro"
+    elif color_code == '2':
+        data['color'] = "Blanco"
+    # ... se pueden agregar más códigos de color si los descubres
 
-
-    # Regex para Capacidad
-    capacity_match = re.search(r"Hard Disk Capacity\s+(\d+GB)", content)
-    if capacity_match:
-        data['capacity'] = capacity_match.group(1).strip()
-
-    # Regex para Número de Serie
-    serial_match = re.search(r"Serial Number\s+([\w\d]+)", content)
-    if serial_match:
-        data['serial'] = serial_match.group(1).strip()
-
-    # Regex para Batería
-    battery_match = re.search(r"Battery Life\s+(\d+%)", content)
-    if battery_match:
-        data['battery_life'] = battery_match.group(1).strip()
-
-    # Aún no encontramos el IMEI en el reporte, pero lo dejamos preparado
-    # imei_match = re.search(r"IMEI:\s*(\d+)", content)
-    # if imei_match: data['imei'] = imei_match.group(1).strip()
+    # NOTA: Capacidad y Batería no están en este informe
+    # data['capacity'] = ...
+    # data['battery_life'] = ...
 
     return data
 
-
-# --- FUNCIÓN DE DIBUJO (DISEÑADOR) RECTANGULAR Y LIMPIO ---
+# --- FUNCIÓN DE DIBUJO (DISEÑADOR) PROFESIONAL ---
 def draw_label(c, x_start, y_start, data):
     """
-    Dibuja la etiqueta final con un diseño rectangular, ordenado y profesional.
+    Diseño final de etiqueta: rectangular, limpio y perfectamente alineado.
     """
     label_width, label_height = 100 * mm, 60 * mm
-    
-    # Colores
-    bg_color = HexColor("#FFFFFF")
-    primary_text = HexColor("#000000")
-    secondary_text = HexColor("#4A4A4A")
-    border_color = HexColor("#DDDDDD")
+    primary_text, secondary_text, border_color = HexColor("#1c1c1e"), HexColor("#6e6e73"), HexColor("#d2d2d7")
 
-    # Contenedor principal rectangular
     c.saveState()
-    c.setFillColor(bg_color)
+    # Contenedor y borde
     c.setStrokeColor(border_color)
-    c.setLineWidth(0.5)
-    c.rect(x_start, y_start, label_width, label_height, fill=1, stroke=1)
+    c.setLineWidth(0.4)
+    c.roundRect(x_start, y_start, label_width, label_height, 3 * mm, stroke=1, fill=0)
 
-    # --- TÍTULO (MODELO) ---
-    c.setFont("Helvetica-Bold", 22)
+    # --- TÍTULO (MODELO) Y MARCA ---
+    c.setFont("Helvetica-Bold", 26)
     c.setFillColor(primary_text)
-    model_text = data.get('model', 'Dispositivo')
-    c.drawString(x_start + 8 * mm, y_start + label_height - 18 * mm, model_text)
-
-    # --- NOMBRE DE LA TIENDA ---
-    c.setFont("Helvetica-Bold", 10)
+    c.drawString(x_start + 10 * mm, y_start + label_height - 20 * mm, data.get('model', 'Dispositivo'))
+    
+    c.setFont("Helvetica", 10)
     c.setFillColor(secondary_text)
-    c.drawRightString(x_start + label_width - 8 * mm, y_start + label_height - 12 * mm, "ImportStore SL")
+    c.drawRightString(x_start + label_width - 10 * mm, y_start + label_height - 13 * mm, "ImportStore SL")
 
     # --- LÍNEA SEPARADORA ---
     c.setStrokeColor(border_color)
-    c.setLineWidth(0.5)
-    c.line(x_start + 8 * mm, y_start + label_height - 24 * mm, x_start + label_width - 8 * mm, y_start + label_height - 24 * mm)
+    c.setLineWidth(0.4)
+    c.line(x_start + 8 * mm, y_start + label_height - 28 * mm, x_start + label_width - 8 * mm, y_start + label_height - 28 * mm)
 
-    # --- ESPECIFICACIONES EN DOS COLUMNAS ---
-    c.setFont("Helvetica", 11)
-    c.setFillColor(secondary_text)
-    
-    # Coordenadas iniciales
-    y_pos = y_start + label_height - 34 * mm
-    x_col1_label = x_start + 8 * mm
-    x_col1_value = x_start + 30 * mm
-    x_col2_label = x_start + 55 * mm
-    x_col2_value = x_start + 70 * mm
+    # --- ESPECIFICACIONES EN DOS COLUMNAS ALINEADAS ---
+    y_pos = y_start + label_height - 38 * mm
+    x_col1 = x_start + 10 * mm
+    x_col2 = x_start + 55 * mm
 
     # Columna 1
-    c.drawString(x_col1_label, y_pos, "Capacidad:")
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(x_col1_value, y_pos, data.get('capacity', 'N/A'))
-    c.setFont("Helvetica", 11)
+    c.setFont("Helvetica", 10); c.setFillColor(secondary_text); c.drawString(x_col1, y_pos, "Capacidad")
+    c.setFont("Helvetica-Bold", 11); c.setFillColor(primary_text); c.drawString(x_col1, y_pos - 5*mm, data.get('capacity', 'N/A'))
+    
+    y_pos -= 15 * mm
+    c.setFont("Helvetica", 10); c.setFillColor(secondary_text); c.drawString(x_col1, y_pos, "Color")
+    c.setFont("Helvetica-Bold", 11); c.setFillColor(primary_text); c.drawString(x_col1, y_pos - 5*mm, data.get('color', 'N/A'))
 
     # Columna 2
-    c.drawString(x_col2_label, y_pos, "Batería:")
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(x_col2_value, y_pos, data.get('battery_life', 'N/A'))
-    c.setFont("Helvetica", 11)
-
-    # Segunda Fila
-    y_pos -= 8 * mm
-    c.drawString(x_col1_label, y_pos, "Color:")
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(x_col1_value, y_pos, data.get('color', 'N/A'))
-    c.setFont("Helvetica", 11)
+    y_pos = y_start + label_height - 38 * mm # Reiniciar Y
+    c.setFont("Helvetica", 10); c.setFillColor(secondary_text); c.drawString(x_col2, y_pos, "Salud de Batería")
+    c.setFont("Helvetica-Bold", 11); c.setFillColor(primary_text); c.drawString(x_col2, y_pos - 5*mm, data.get('battery_life', 'N/A'))
     
-    # --- SECCIÓN INFERIOR PARA SN / IMEI ---
-    footer_y = y_start + 8 * mm
+    # --- SECCIÓN INFERIOR: IDENTIFICADORES ---
+    footer_y = y_start + 10 * mm
+    c.setFont("Helvetica", 10); c.setFillColor(secondary_text); c.drawString(x_start + 10 * mm, footer_y, "Número de Serie")
+    c.setFont("Helvetica-Bold", 10); c.setFillColor(primary_text); c.drawString(x_start + 10 * mm, footer_y - 5*mm, data.get('serial', 'N/A'))
     
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(x_start + 8 * mm, footer_y, f"S/N: {data.get('serial', 'N/A')}")
-    c.drawRightString(x_start + label_width - 8 * mm, footer_y, f"IMEI: {data.get('imei', 'N/A')}")
-
+    c.setFont("Helvetica", 10); c.setFillColor(secondary_text); c.drawRightString(x_start + label_width - 10*mm, footer_y, "IMEI")
+    c.setFont("Helvetica-Bold", 10); c.setFillColor(primary_text); c.drawRightString(x_start + label_width - 10*mm, footer_y - 5*mm, data.get('imei', 'N/A'))
+    
     c.restoreState()
 
 
 def create_pdf(data, output_filename):
     c = canvas.Canvas(output_filename, pagesize=A4)
-    draw_label(c, (A4[0] - 100 * mm) / 2, A4[1] - 80 * mm, data) # Etiqueta centrada en la parte superior
+    draw_label(c, (A4[0] - 100 * mm) / 2, A4[1] - 80 * mm, data)
     c.save()
 
-# --- RUTAS DE LA APLICACIÓN WEB (SIN CAMBIOS) ---
+# --- RUTAS DE LA APLICACIÓN WEB ---
 @app.route('/')
-def index():
-    return render_template('index.html')
+def index(): return render_template('index.html')
 
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    if 'file' not in request.files: return jsonify({'error': 'No se envió ningún archivo.'}), 400
-    file = request.files['file']
-    if file.filename == '' or not file.filename.endswith('.txt'): return jsonify({'error': 'Archivo no válido. Sube un .txt'}), 400
-    
+@app.route('/process', methods=['POST'])
+def process_text():
+    text_content = request.form.get('text_content')
+    if not text_content:
+        return jsonify({'error': 'El cuadro de texto está vacío.'}), 400
+
+    device_data = parse_info(text_content)
+    if not device_data:
+        return jsonify({'error': 'No se pudo procesar el texto.'}), 500
+
     unique_id = str(uuid.uuid4())
-    txt_filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{unique_id}.txt")
-    file.save(txt_filepath)
-
-    device_data = parse_3utools_report(txt_filepath)
-    if not device_data: return jsonify({'error': 'No se pudo procesar el archivo.'}), 500
-
     pdf_filename = f"etiqueta_{unique_id}.pdf"
     pdf_filepath = os.path.join(app.config['GENERATED_FOLDER'], pdf_filename)
     create_pdf(device_data, pdf_filepath)
@@ -187,14 +146,14 @@ def upload_file():
         images = convert_from_path(pdf_filepath, 300, first_page=1, last_page=1)
         if images: images[0].save(preview_filepath, 'PNG')
     except Exception as e:
-        print(f"Error generando preview: {e}")
-        return jsonify({'error': 'Error al generar la vista previa. Revisa que Poppler esté instalado.'}), 500
-
-    return jsonify({'preview_url': f"/generated/{preview_filename}", 'pdf_url': f"/generated/{pdf_filename}"})
+        print(f"Error generando preview: {e}"); return jsonify({'error': 'Error al generar la vista previa.'}), 500
+    
+    return jsonify({
+        'preview_url': f"/generated/{preview_filename}",
+        'pdf_url': f"/generated/{pdf_filename}"
+    })
 
 @app.route('/generated/<filename>')
-def generated_file(filename):
-    return send_from_directory(app.config['GENERATED_FOLDER'], filename)
+def generated_file(filename): return send_from_directory(app.config['GENERATED_FOLDER'], filename)
 
-if __name__ == '__main__':
-    app.run(debug=True)
+if __name__ == '__main__': app.run(debug=True)
