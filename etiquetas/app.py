@@ -27,7 +27,7 @@ os.makedirs(app.config['GENERATED_FOLDER'], exist_ok=True)
 def parse_3utools_report(file_path):
     # ... (La misma función de parseo que ya teníamos)
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             lines = f.readlines()
     except FileNotFoundError:
         return None
