@@ -1,4 +1,4 @@
-# app.py - VERSIÓN CON PASO DE VERIFICACIÓN Y EDICIÓN
+# app.py - VERSIÓN FINAL CON MODO MANUAL Y AUTOMÁTICO
 import os
 import re
 import uuid

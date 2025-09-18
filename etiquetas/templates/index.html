@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generador de Etiquetas V2</title>
+    <title>Generador de Etiquetas Pro</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
@@ -12,11 +12,20 @@
 <body>
     <div class="container">
         <header>
-            <h1>Generador de Etiquetas</h1>
+            <h1>Generador de Etiquetas Pro</h1>
         </header>
 
-        <section id="upload-section">
-            <p>Sube el reporte de 3uTools y añade el IMEI para comenzar.</p>
+        <section id="mode-selection">
+            <p>Selecciona un método para crear tu etiqueta:</p>
+            <div class="button-group">
+                <button id="mode-auto-btn" class="button">🤖 Crear desde Reporte (.txt)</button>
+                <button id="mode-manual-btn" class="button button-secondary">✍️ Crear Manualmente</button>
+            </div>
+        </section>
+
+        <section id="upload-section" style="display: none;">
+            <hr>
+            <h2>Modo Automático</h2>
             <form id="upload-form">
                 <div id="upload-area" class="upload-area">
                     <div class="icon">📄</div>
@@ -31,8 +40,41 @@
             </form>
         </section>
 
+        <section id="manual-section" style="display: none;">
+            <hr>
+            <h2>Modo Manual</h2>
+            <form id="manual-form" class="manual-form">
+                <div class="form-row">
+                    <div class="input-group">
+                        <label for="manual-model">Modelo</label>
+                        <select id="manual-model"></select>
+                    </div>
+                    <div class="input-group">
+                        <label for="manual-capacity">Capacidad</label>
+                        <select id="manual-capacity"></select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="input-group">
+                        <label for="manual-color">Color</label>
+                        <select id="manual-color"></select>
+                    </div>
+                    <div class="input-group">
+                        <label for="manual-battery">Salud de Batería (%)</label>
+                        <input type="text" id="manual-battery" placeholder="Ej: 88%">
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="manual-imei">IMEI</label>
+                    <input type="text" id="manual-imei" placeholder="Ingresa el IMEI del equipo">
+                </div>
+                <button type="submit" class="button">Verificar Datos</button>
+            </form>
+        </section>
+
         <section id="edit-section" style="display: none;">
-            <h2>Verifica y edita los datos antes de generar</h2>
+            <hr>
+            <h2>Verifica y edita los datos</h2>
             <div class="edit-container">
                 <form id="edit-form" class="edit-form">
                     <div class="input-group">
@@ -56,7 +98,7 @@
                         <input type="text" id="edit-imei" name="imei">
                     </div>
                     <div class="button-group">
-                        <button type="button" id="cancel-btn" class="button button-secondary">Cancelar</button>
+                        <button type="button" id="back-btn" class="button button-secondary">Volver</button>
                         <button type="submit" class="button">Generar Etiqueta Final</button>
                     </div>
                 </form>
@@ -96,10 +138,7 @@
             <button id="reset-btn" class="button button-secondary">Crear otra etiqueta</button>
         </section>
 
-        <div id="loading" class="loading" style="display: none;">
-            <div class="spinner"></div>
-            <p>Procesando...</p>
-        </div>
+        <div id="loading" class="loading" style="display: none;"></div>
         <div id="error-message" class="error" style="display: none;"></div>
     </div>
     <script src="/static/js/main.js"></script>
