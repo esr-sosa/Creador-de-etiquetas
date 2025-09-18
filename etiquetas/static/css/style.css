@@ -119,3 +119,130 @@ header h1 {
     padding: 10px;
     border-radius: 8px;
 }
+/* Agrega esto al final de tu archivo style.css */
+
+.edit-container {
+    display: flex;
+    gap: 30px;
+    margin-top: 20px;
+    text-align: left;
+}
+
+.edit-form {
+    flex: 1;
+}
+
+.input-group {
+    margin-bottom: 15px;
+}
+
+.input-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.input-group input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 1rem;
+    box-sizing: border-box;
+}
+
+.button-group {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+}
+
+.button-secondary {
+    background-color: #6c757d;
+}
+.button-secondary:hover {
+    background-color: #5a6268;
+}
+
+.live-preview-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.preview-title {
+    text-align: center;
+    font-weight: 500;
+    margin-bottom: 10px;
+    color: var(--primary-color);
+}
+
+.live-preview {
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 15px;
+    font-family: 'Inter', sans-serif;
+    aspect-ratio: 70 / 40; /* Mantiene la proporción de la etiqueta */
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background-color: #fff;
+}
+
+.preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.preview-model-details .model {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin: 0;
+}
+.preview-model-details .details {
+    font-size: 0.9rem;
+    color: #6c757d;
+    margin: 0;
+}
+
+.logo {
+    width: 50px;
+    height: 50px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.preview-divider {
+    height: 1px;
+    background-color: var(--border-color);
+    margin: 10px 0;
+}
+
+.preview-footer {
+    display: flex;
+    justify-content: space-between;
+}
+
+.footer-col .title {
+    font-size: 0.7rem;
+    color: #6c757d;
+    margin: 0;
+}
+.footer-col .data {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 2px 0 0;
+}
+.footer-col.right {
+    text-align: right;
+}
+
+.preview-verified {
+    text-align: center;
+    font-size: 0.6rem;
+    color: #008A00;
+    margin: 10px 0 0;
+}

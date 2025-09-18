@@ -1,16 +1,18 @@
-# app.py - VERSIÓN FINAL HÍBRIDA (ARCHIVO + IMEI MANUAL)
+# app.py - VERSIÓN CON PASO DE VERIFICACIÓN Y EDICIÓN
 import os
 import re
 import uuid
 from flask import Flask, render_template, request, jsonify, send_from_directory
+from io import BytesIO
+
+# LIBRERÍAS PARA DIBUJO Y CONVERSIÓN
 from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
-from reportlab.lib.colors import HexColor
-from reportlab.graphics.barcode import code128
-from reportlab.graphics.shapes import Drawing
-from reportlab.graphics import renderPDF
-from pdf2image import convert_from_path
+from reportlab.lib import colors
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.utils import ImageReader
+from pdf2image import convert_from_bytes
 
 # --- CONFIGURACIÓN DE FLASK ---
 app = Flask(__name__)
@@ -19,182 +21,167 @@ app.config['GENERATED_FOLDER'] = 'generated'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['GENERATED_FOLDER'], exist_ok=True)
 
-# --- FUNCIÓN DE PARSEO (TRADUCTOR) PRECISO PARA EL REPORTE ---
+# --- CONFIGURACIÓN DE DISEÑO ---
+LOGO_PATH = 'logo.png'
+try:
+    pdfmetrics.registerFont(TTFont('DejaVuSans', 'DejaVuSans.ttf'))
+    EMOJI_FONT = 'DejaVuSans'
+except:
+    print("ADVERTENCIA: No se encontró la fuente DejaVuSans.ttf.")
+    EMOJI_FONT = 'Helvetica'
+
+if not os.path.exists(LOGO_PATH):
+    print(f"ADVERTENCIA: No se encontró el archivo de logo en {LOGO_PATH}.")
+    LOGO_PATH = None
+
+# --- MAPEO DE COLORES ---
+COLOR_MAPPING = {
+    "red": "Rojo", "black": "Negro", "green": "Verde", "blue": "Azul",
+    "white": "Blanco", "starlight": "Blanco Estrella", "midnight": "Negro Medianoche",
+    "pink": "Rosa", "purple": "Púrpura", "gold": "Dorado", "silver": "Plateado",
+    "space gray": "Gris Espacial", "sierra blue": "Azul Sierra", "alpine green": "Verde Alpino",
+    "graphite": "Grafito", "natural": "Titanio Natural", "titanium": "Titanio"
+}
+
+# --- FUNCIÓN DE PARSEO ---
 def parse_3utools_report(file_path):
-    """
-    Parsea el reporte de Verificación de 3uTools. Es específico para este formato.
-    """
     try:
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
-    except FileNotFoundError:
-        return None
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f: content = f.read()
+    except FileNotFoundError: return None
+    data = {'model': 'N/A', 'color': 'N/A', 'capacity': 'N/A', 'battery_life': 'N/A'}
 
-    data = {
-        'model': 'iPhone', # Valor predeterminado a 'iPhone' si no se encuentra el modelo exacto
-        'color': 'N/A',
-        'capacity': 'N/A',
-        'serial': 'N/A',
-        'battery_life': 'N/A',
-        'imei': 'N/A'
-    }
+    model_search = re.search(r"Device Model\s+(iPhone\s+\d+\s*(?:Plus|Pro|Max|Mini|SE)?)", content)
+    if model_search: data['model'] = model_search.group(1).strip()
 
-    # Modelo: Busca "iPhone 12" específicamente
-    model_search = re.search(r"Device Model\s+(iPhone\s+\d+)", content)
-    if model_search:
-        data['model'] = model_search.group(1).strip()
-    else: # Si no encuentra el "iPhone 12", se queda con "iPhone"
-        pass
+    color_line_search = re.search(r"Device Color\s+(.*)", content)
+    if color_line_search:
+        full_line = color_line_search.group(1)
+        rear_color_search = re.search(r"Rear\s+([\w\s()]+)", full_line, re.IGNORECASE)
+        if rear_color_search:
+            extracted_color = rear_color_search.group(1).strip().lower()
+            for key, value in COLOR_MAPPING.items():
+                if key in extracted_color:
+                    data['color'] = value
+                    break
+            if data['color'] == 'N/A': data['color'] = extracted_color.title()
+        else:
+            data['color'] = full_line.split('Normal')[0].strip()
 
-    # Color: Busca "(PRODUCT)RED" y lo traduce a "Rojo" o el color que aparezca
-    color_search_red = re.search(r"Device Color\s+\(.*PRODUCT\)RED", content)
-    if color_search_red:
-        data['color'] = "Rojo"
-    else:
-        # Busca el patrón de color más genérico
-        color_search = re.search(r"Device Color\s+([\w\s]+?)(?:£¬Rear[\w\s]+?)?\s+Normal", content)
-        if color_search:
-            extracted_color = color_search.group(1).strip()
-            # Si el color es "Front Black", lo simplificamos a "Negro"
-            if extracted_color == "Front Black":
-                data['color'] = "Negro"
-            else:
-                data['color'] = extracted_color
-
-
-    # Capacidad: Busca el patrón "XXGB"
     capacity_search = re.search(r"Hard Disk Capacity\s+(\d+GB)", content)
-    if capacity_search:
-        data['capacity'] = capacity_search.group(1)
-
-    # Serial: Busca la cadena alfanumérica de 12 caracteres después de "Serial Number"
-    serial_search = re.search(r"Serial Number\s+([A-Z0-9]{12})", content)
-    if serial_search:
-        data['serial'] = serial_search.group(1)
-
-    # Batería: Busca el porcentaje exacto
+    if capacity_search: data['capacity'] = capacity_search.group(1).strip()
+    
     battery_search = re.search(r"Battery Life\s+(\d+%)", content)
-    if battery_search:
-        data['battery_life'] = battery_search.group(1)
-        
+    if battery_search: data['battery_life'] = battery_search.group(1).strip()
+    
     return data
 
-from reportlab.graphics.barcode import code128
-from reportlab.graphics.shapes import Drawing
-from reportlab.graphics import renderPDF
-
+# --- FUNCIÓN DE DIBUJO ---
 def draw_label(c, x_start, y_start, data):
-    """
-    Diseño final tipo Apple Swap con barcode de IMEI.
-    """
-    # Tamaño etiqueta más chico (realista)
     label_width, label_height = 70 * mm, 40 * mm
-    primary_text, secondary_text, border_color = HexColor("#1c1c1e"), HexColor("#6e6e73"), HexColor("#d2d2d7")
-
+    text_color, subtle_text_color, border_color = colors.black, colors.HexColor("#4A4A4A"), colors.HexColor("#D8D8D8")
+    font_bold, font_regular = "Helvetica-Bold", "Helvetica"
+    margin = 5 * mm
+    
     c.saveState()
-    # Contenedor con bordes suaves
     c.setStrokeColor(border_color)
-    c.setLineWidth(0.4)
-    c.roundRect(x_start, y_start, label_width, label_height, 2 * mm, stroke=1, fill=0)
-
-    # --- MODELO ---
-    c.setFont("Helvetica-Bold", 16)
-    c.setFillColor(primary_text)
-    model_text = data.get('model', 'iPhone')
-    c.drawString(x_start + 8 * mm, y_start + label_height - 10 * mm, model_text)
-
-    # --- CAPACIDAD + COLOR ---
-    c.setFont("Helvetica", 9)
-    c.setFillColor(secondary_text)
-    cap_col = f"{data.get('capacity', 'N/A')} · {data.get('color', 'N/A')}"
-    c.drawString(x_start + 8 * mm, y_start + label_height - 15 * mm, cap_col)
-
-    # --- LÍNEA DIVISORIA ---
+    c.setLineWidth(0.5)
+    c.roundRect(x_start + 0.5*mm, y_start + 0.5*mm, label_width - 1*mm, label_height - 1*mm, 2 * mm, stroke=1, fill=0)
+    
+    top_section_y = y_start + label_height - margin - 5*mm
+    if LOGO_PATH:
+        logo = ImageReader(LOGO_PATH)
+        logo_w, logo_h = logo.getSize()
+        aspect = logo_h / float(logo_w)
+        logo_width_final = 20 * mm
+        logo_height_final = logo_width_final * aspect
+        c.drawImage(logo, x_start + label_width - logo_width_final - margin, top_section_y - logo_height_final/1.5,
+                    width=logo_width_final, height=logo_height_final, mask='auto', preserveAspectRatio=True)
+    
+    c.setFont(font_bold, 18)
+    c.setFillColor(text_color)
+    c.drawString(x_start + margin, top_section_y, data.get('model', ''))
+    c.setFont(font_regular, 10)
+    c.setFillColor(subtle_text_color)
+    c.drawString(x_start + margin, top_section_y - 6*mm, f"{data.get('capacity', '')} · {data.get('color', '')}")
+    
+    line_y = y_start + 19 * mm
     c.setStrokeColor(border_color)
-    c.setLineWidth(0.3)
-    c.line(x_start + 6 * mm, y_start + label_height - 18 * mm, x_start + label_width - 6 * mm, y_start + label_height - 18 * mm)
-
-    # --- SALUD DE BATERÍA ---
-    c.setFont("Helvetica", 9)
-    c.setFillColor(secondary_text)
-    c.drawString(x_start + 8 * mm, y_start + label_height - 23 * mm, "Salud de Batería")
-    c.setFont("Helvetica-Bold", 10)
-    c.setFillColor(primary_text)
-    c.drawString(x_start + 8 * mm, y_start + label_height - 28 * mm, data.get('battery_life', 'N/A'))
-
-    # --- SERIE E IMEI ---
-    footer_y = y_start + 8 * mm
-    c.setFont("Helvetica", 8); c.setFillColor(secondary_text)
-    c.drawString(x_start + 8 * mm, footer_y, "Serie")
-    c.setFont("Helvetica-Bold", 8); c.setFillColor(primary_text)
-    c.drawString(x_start + 8 * mm, footer_y - 4 * mm, data.get('serial', 'N/A'))
-
-    c.setFont("Helvetica", 8); c.setFillColor(secondary_text)
-    c.drawRightString(x_start + label_width - 8 * mm, footer_y, "IMEI")
-    c.setFont("Helvetica-Bold", 8); c.setFillColor(primary_text)
-    c.drawRightString(x_start + label_width - 8 * mm, footer_y - 4 * mm, data.get('imei', 'N/A'))
-
-    # --- CÓDIGO DE BARRAS DEL IMEI ---
-    imei_value = data.get('imei', '000000000000000')
-    barcode = code128.Code128(imei_value, barHeight=8*mm, barWidth=0.3)
-    # --- CÓDIGO DE BARRAS DEL IMEI ---
-    imei_value = data.get('imei', '000000000000000')
-    barcode = code128.Code128(imei_value, barHeight=8*mm, barWidth=0.3)
-# Dibujar directo sobre el canvas (sin Drawing)
-    barcode.drawOn(c, x_start + (label_width/2 - 25*mm), y_start + 2*mm)
-
-
+    c.setLineWidth(0.5)
+    c.line(x_start + margin, line_y, x_start + label_width - margin, line_y)
+    
+    bottom_title_y = y_start + margin + 7*mm
+    bottom_data_y = y_start + margin + 2*mm
+    
+    c.setFont(font_regular, 8)
+    c.setFillColor(subtle_text_color)
+    c.drawString(x_start + margin, bottom_title_y, "Salud de Batería")
+    c.setFont(font_bold, 12)
+    c.setFillColor(text_color)
+    c.drawString(x_start + margin, bottom_data_y, data.get('battery_life', ''))
+    
+    c.setFont(font_regular, 8)
+    c.setFillColor(subtle_text_color)
+    c.drawRightString(x_start + label_width - margin, bottom_title_y, "IMEI")
+    c.setFont(font_bold, 12)
+    c.setFillColor(text_color)
+    c.drawRightString(x_start + label_width - margin, bottom_data_y, data.get('imei', ''))
+    
+    c.setFont(EMOJI_FONT, 7)
+    c.setFillColor(colors.HexColor("#008A00"))
+    c.drawCentredString(x_start + label_width/2, y_start + margin - 2*mm, "✅ Piezas Verificadas")
+    
     c.restoreState()
 
-
-
-
-
-def create_pdf(data, output_filename):
-    c = canvas.Canvas(output_filename, pagesize=A4)
-    # Centramos la etiqueta en la página
-    draw_label(c, (A4[0] - 100 * mm) / 2, A4[1] - 80 * mm, data)
+# --- FUNCIÓN DE CREACIÓN DE IMAGEN ---
+def create_image_from_pdf(data, output_filepath):
+    buffer = BytesIO()
+    label_width, label_height = 70 * mm, 40 * mm
+    c = canvas.Canvas(buffer, pagesize=(label_width, label_height))
+    draw_label(c, 0, 0, data)
     c.save()
+    buffer.seek(0)
+    images = convert_from_bytes(buffer.read(), dpi=300)
+    if images: images[0].save(output_filepath, 'PNG')
 
 # --- RUTAS DE LA APLICACIÓN WEB ---
 @app.route('/')
 def index(): return render_template('index.html')
 
-@app.route('/upload', methods=['POST'])
-def upload_file():
+@app.route('/parse', methods=['POST'])
+def parse_file():
     if 'file' not in request.files: return jsonify({'error': 'No se seleccionó ningún archivo.'}), 400
-    
     file = request.files['file']
-    imei_text = request.form.get('imei', '').strip()
+    if file.filename == '': return jsonify({'error': 'Nombre de archivo vacío.'}), 400
     
-    if file.filename == '': return jsonify({'error': 'No se seleccionó ningún archivo .txt.'}), 400
-    if not imei_text: return jsonify({'error': 'El campo IMEI es obligatorio.'}), 400
-
     unique_id = str(uuid.uuid4())
     txt_filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{unique_id}.txt")
     file.save(txt_filepath)
 
     device_data = parse_3utools_report(txt_filepath)
-    if not device_data or device_data['model'] == 'N/A':
-        return jsonify({'error': 'No se pudo procesar el archivo. Sube un reporte válido.'}), 500
+    os.remove(txt_filepath)
+    
+    if not device_data:
+        return jsonify({'error': 'No se pudo procesar el reporte.'}), 500
+    
+    return jsonify(device_data)
 
-    # Añadimos el IMEI del formulario a los datos extraídos
-    device_data['imei'] = imei_text
-
-    pdf_filename = f"etiqueta_{unique_id}.pdf"
-    pdf_filepath = os.path.join(app.config['GENERATED_FOLDER'], pdf_filename)
-    create_pdf(device_data, pdf_filepath)
-
-    preview_filename = f"preview_{unique_id}.png"
-    preview_filepath = os.path.join(app.config['GENERATED_FOLDER'], preview_filename)
+@app.route('/generate', methods=['POST'])
+def generate_image():
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No se recibieron datos para generar la etiqueta.'}), 400
+        
+    unique_id = str(uuid.uuid4())
+    image_filename = f"etiqueta_{unique_id}.png"
+    image_filepath = os.path.join(app.config['GENERATED_FOLDER'], image_filename)
+    
     try:
-        images = convert_from_path(pdf_filepath, 300, first_page=1, last_page=1)
-        if images: images[0].save(preview_filepath, 'PNG')
+        create_image_from_pdf(data, image_filepath)
     except Exception as e:
-        print(f"Error generando preview: {e}"); return jsonify({'error': 'Error al generar la vista previa.'}), 500
+        print(f"Error generando la imagen: {e}")
+        return jsonify({'error': 'Ocurrió un error al crear la etiqueta.'}), 500
 
-    return jsonify({'preview_url': f"/generated/{preview_filename}", 'pdf_url': f"/generated/{pdf_filename}"})
-
+    return jsonify({'image_url': f"/generated/{image_filename}"})
 
 @app.route('/generated/<filename>')
 def generated_file(filename): return send_from_directory(app.config['GENERATED_FOLDER'], filename)

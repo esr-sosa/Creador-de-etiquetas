@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generador de Etiquetas Híbrido</title>
+    <title>Generador de Etiquetas V2</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
@@ -13,37 +13,93 @@
     <div class="container">
         <header>
             <h1>Generador de Etiquetas</h1>
-            <p>Sube el reporte de 3uTools y añade el IMEI para crear la etiqueta completa.</p>
         </header>
 
-        <form id="upload-form">
-            <div id="upload-area" class="upload-area">
-                <div class="icon">📄</div>
-                <p><strong>Paso 1:</strong> Arrastra y suelta el reporte (.txt) aquí.</p>
-                <input type="file" id="file-input" accept=".txt" hidden>
-            </div>
-            
-            <div class="input-group">
-                <label for="imei-input"><strong>Paso 2:</strong> Pega el IMEI (Obligatorio)</label>
-                <input type="text" id="imei-input" name="imei" placeholder="Ej: 353038111075209">
-            </div>
+        <section id="upload-section">
+            <p>Sube el reporte de 3uTools y añade el IMEI para comenzar.</p>
+            <form id="upload-form">
+                <div id="upload-area" class="upload-area">
+                    <div class="icon">📄</div>
+                    <p><strong>Arrastra y suelta el reporte (.txt) aquí.</strong></p>
+                    <input type="file" id="file-input" accept=".txt" hidden>
+                </div>
+                <div class="input-group">
+                    <label for="initial-imei-input"><strong>Pega el IMEI (Obligatorio)</strong></label>
+                    <input type="text" id="initial-imei-input" placeholder="Ej: 353038111075209">
+                </div>
+                <button type="submit" class="button">Verificar Datos</button>
+            </form>
+        </section>
 
-            <button type="submit" id="generate-btn" class="button">Generar Etiqueta</button>
-        </form>
+        <section id="edit-section" style="display: none;">
+            <h2>Verifica y edita los datos antes de generar</h2>
+            <div class="edit-container">
+                <form id="edit-form" class="edit-form">
+                    <div class="input-group">
+                        <label for="edit-model">Modelo</label>
+                        <input type="text" id="edit-model" name="model">
+                    </div>
+                    <div class="input-group">
+                        <label for="edit-capacity">Capacidad</label>
+                        <input type="text" id="edit-capacity" name="capacity">
+                    </div>
+                    <div class="input-group">
+                        <label for="edit-color">Color</label>
+                        <input type="text" id="edit-color" name="color">
+                    </div>
+                    <div class="input-group">
+                        <label for="edit-battery">Salud de Batería</label>
+                        <input type="text" id="edit-battery" name="battery_life">
+                    </div>
+                    <div class="input-group">
+                        <label for="edit-imei">IMEI</label>
+                        <input type="text" id="edit-imei" name="imei">
+                    </div>
+                    <div class="button-group">
+                        <button type="button" id="cancel-btn" class="button button-secondary">Cancelar</button>
+                        <button type="submit" class="button">Generar Etiqueta Final</button>
+                    </div>
+                </form>
+                <div class="live-preview-wrapper">
+                    <p class="preview-title">Vista Previa en Vivo</p>
+                    <div class="live-preview">
+                        <div class="preview-header">
+                            <div class="preview-model-details">
+                                <p id="preview-model" class="model"></p>
+                                <p id="preview-details" class="details"></p>
+                            </div>
+                            <div id="preview-logo" class="logo"></div>
+                        </div>
+                        <div class="preview-divider"></div>
+                        <div class="preview-footer">
+                            <div class="footer-col">
+                                <p class="title">Salud de Batería</p>
+                                <p id="preview-battery" class="data"></p>
+                            </div>
+                            <div class="footer-col right">
+                                <p class="title">IMEI</p>
+                                <p id="preview-imei" class="data"></p>
+                            </div>
+                        </div>
+                        <p class="preview-verified">✅ Piezas Verificadas</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="result-section" class="result-area" style="display: none;">
+            <h2>¡Etiqueta generada con éxito!</h2>
+            <div class="preview-container">
+                <img id="final-image" src="" alt="Etiqueta Final">
+            </div>
+            <a href="#" id="download-btn" class="button" download>Descargar Imagen PNG</a>
+            <button id="reset-btn" class="button button-secondary">Crear otra etiqueta</button>
+        </section>
 
         <div id="loading" class="loading" style="display: none;">
             <div class="spinner"></div>
             <p>Procesando...</p>
         </div>
-
-        <div id="result" class="result-area" style="display: none;">
-            <h2>Previsualización de la Etiqueta</h2>
-            <div class="preview-container">
-                <img id="preview-image" src="" alt="Previsualización de la etiqueta">
-            </div>
-            <a href="#" id="download-btn" class="button" download>Descargar PDF</a>
-        </div>
-
         <div id="error-message" class="error" style="display: none;"></div>
     </div>
     <script src="/static/js/main.js"></script>
