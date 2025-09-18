@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generador de Etiquetas para Celulares</title>
+    <title>Generador de Etiquetas Híbrido</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
@@ -13,13 +13,22 @@
     <div class="container">
         <header>
             <h1>Generador de Etiquetas</h1>
-            <p>Sube el reporte de 3uTools (.txt) para crear una etiqueta profesional.</p>
+            <p>Sube el reporte de 3uTools y añade el IMEI para crear la etiqueta completa.</p>
         </header>
 
-        <form id="upload-form" class="upload-area">
-            <div class="icon">📄</div>
-            <p>Arrastra y suelta tu archivo aquí, o <strong>haz clic para seleccionar</strong>.</p>
-            <input type="file" id="file-input" accept=".txt" hidden>
+        <form id="upload-form">
+            <div id="upload-area" class="upload-area">
+                <div class="icon">📄</div>
+                <p><strong>Paso 1:</strong> Arrastra y suelta el reporte (.txt) aquí.</p>
+                <input type="file" id="file-input" accept=".txt" hidden>
+            </div>
+            
+            <div class="input-group">
+                <label for="imei-input"><strong>Paso 2:</strong> Pega el IMEI (Obligatorio)</label>
+                <input type="text" id="imei-input" name="imei" placeholder="Ej: 353038111075209">
+            </div>
+
+            <button type="submit" id="generate-btn" class="button">Generar Etiqueta</button>
         </form>
 
         <div id="loading" class="loading" style="display: none;">

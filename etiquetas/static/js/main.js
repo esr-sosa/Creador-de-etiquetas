@@ -1,7 +1,9 @@
 // static/js/main.js
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('upload-form');
+    const uploadArea = document.getElementById('upload-area');
     const fileInput = document.getElementById('file-input');
+    const imeiInput = document.getElementById('imei-input');
     const loadingDiv = document.getElementById('loading');
     const resultDiv = document.getElementById('result');
     const errorDiv = document.getElementById('error-message');
@@ -9,36 +11,47 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadBtn = document.getElementById('download-btn');
 
     // Abrir selector de archivos al hacer clic en el area
-    form.addEventListener('click', () => {
+    uploadArea.addEventListener('click', () => {
         fileInput.click();
     });
 
-    // Manejar el cambio del input de archivo
     fileInput.addEventListener('change', () => {
         if (fileInput.files.length > 0) {
-            handleFile(fileInput.files[0]);
+            uploadArea.querySelector('p').textContent = `Archivo seleccionado: ${fileInput.files[0].name}`;
         }
     });
 
     // Manejar Drag & Drop
-    form.addEventListener('dragover', (e) => {
+    uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('drag-over'); });
+    uploadArea.addEventListener('dragleave', () => { uploadArea.classList.remove('drag-over'); });
+    uploadArea.addEventListener('drop', (e) => {
         e.preventDefault();
-        form.classList.add('drag-over');
-    });
-    form.addEventListener('dragleave', () => {
-        form.classList.remove('drag-over');
-    });
-    form.addEventListener('drop', (e) => {
-        e.preventDefault();
-        form.classList.remove('drag-over');
+        uploadArea.classList.remove('drag-over');
         if (e.dataTransfer.files.length > 0) {
             fileInput.files = e.dataTransfer.files;
-            handleFile(e.dataTransfer.files[0]);
+            uploadArea.querySelector('p').textContent = `Archivo seleccionado: ${fileInput.files[0].name}`;
         }
     });
 
-    const handleFile = (file) => {
-        // Ocultar resultados anteriores y mostrar carga
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        
+        const file = fileInput.files[0];
+        const imei = imeiInput.value;
+
+        if (!file) {
+            showError("Por favor, selecciona un archivo .txt.");
+            return;
+        }
+        if (imei.trim() === "") {
+            showError("Por favor, introduce el IMEI.");
+            return;
+        }
+
+        handleUpload(file, imei);
+    });
+
+    const handleUpload = (file, imei) => {
         form.style.display = 'none';
         errorDiv.style.display = 'none';
         resultDiv.style.display = 'none';
@@ -46,6 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const formData = new FormData();
         formData.append('file', file);
+        formData.append('imei', imei);
 
         fetch('/upload', {
             method: 'POST',
@@ -64,7 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(error => {
             loadingDiv.style.display = 'none';
-            showError('Ocurrió un error inesperado. Revisa la consola del servidor.');
+            showError('Ocurrió un error inesperado.');
             console.error('Error:', error);
         });
     };
@@ -72,6 +86,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const showError = (message) => {
         errorDiv.textContent = message;
         errorDiv.style.display = 'block';
-        form.style.display = 'block'; // Mostrar el formulario de nuevo
+        form.style.display = 'block';
     };
 });
