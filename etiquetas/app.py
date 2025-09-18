@@ -1,4 +1,4 @@
-# app.py - VERSIÓN FINAL CON MODO MANUAL Y AUTOMÁTICO
+# app.py - VERSIÓN FINAL CON AJUSTE DE FUENTE DINÁMICO
 import os
 import re
 import uuid
@@ -13,6 +13,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.utils import ImageReader
 from pdf2image import convert_from_bytes
+from PIL import Image
 
 # --- CONFIGURACIÓN DE FLASK ---
 app = Flask(__name__)
@@ -75,9 +76,16 @@ def parse_3utools_report(file_path):
     
     return data
 
-# --- FUNCIÓN DE DIBUJO ---
+# --- FUNCIÓN DE DIBUJO (CON LÓGICA DE FUENTE DINÁMICA) ---
 def draw_label(c, x_start, y_start, data):
     label_width, label_height = 70 * mm, 40 * mm
+    print_margin = 1.5 * mm
+    
+    draw_area_x = x_start + print_margin
+    draw_area_y = y_start + print_margin
+    draw_area_width = label_width - (2 * print_margin)
+    draw_area_height = label_height - (2 * print_margin)
+    
     text_color, subtle_text_color, border_color = colors.black, colors.HexColor("#4A4A4A"), colors.HexColor("#D8D8D8")
     font_bold, font_regular = "Helvetica-Bold", "Helvetica"
     margin = 5 * mm
@@ -85,63 +93,75 @@ def draw_label(c, x_start, y_start, data):
     c.saveState()
     c.setStrokeColor(border_color)
     c.setLineWidth(0.5)
-    c.roundRect(x_start + 0.5*mm, y_start + 0.5*mm, label_width - 1*mm, label_height - 1*mm, 2 * mm, stroke=1, fill=0)
+    c.roundRect(draw_area_x, draw_area_y, draw_area_width, draw_area_height, 2 * mm, stroke=1, fill=0)
     
-    top_section_y = y_start + label_height - margin - 5*mm
+    top_section_y = draw_area_y + draw_area_height - margin - 5*mm
     if LOGO_PATH:
         logo = ImageReader(LOGO_PATH)
         logo_w, logo_h = logo.getSize()
         aspect = logo_h / float(logo_w)
         logo_width_final = 20 * mm
         logo_height_final = logo_width_final * aspect
-        c.drawImage(logo, x_start + label_width - logo_width_final - margin, top_section_y - logo_height_final/1.5,
+        c.drawImage(logo, draw_area_x + draw_area_width - logo_width_final - margin, top_section_y - logo_height_final/1.5,
                     width=logo_width_final, height=logo_height_final, mask='auto', preserveAspectRatio=True)
     
-    c.setFont(font_bold, 18)
+    # --- AJUSTE CLAVE: LÓGICA PARA EL TAMAÑO DE LA FUENTE ---
+    model_text = data.get('model', '')
+    model_font_size = 18  # Tamaño por defecto
+    if 'Pro' in model_text or 'Max' in model_text or 'Plus' in model_text:
+        model_font_size = 15  # Tamaño más chico para modelos con nombres largos
+
+    c.setFont(font_bold, model_font_size)
     c.setFillColor(text_color)
-    c.drawString(x_start + margin, top_section_y, data.get('model', ''))
+    c.drawString(draw_area_x + margin, top_section_y, model_text)
+    
     c.setFont(font_regular, 10)
     c.setFillColor(subtle_text_color)
-    c.drawString(x_start + margin, top_section_y - 6*mm, f"{data.get('capacity', '')} · {data.get('color', '')}")
+    c.drawString(draw_area_x + margin, top_section_y - 6*mm, f"{data.get('capacity', '')} · {data.get('color', '')}")
     
-    line_y = y_start + 19 * mm
+    line_y = draw_area_y + 19 * mm - print_margin
     c.setStrokeColor(border_color)
     c.setLineWidth(0.5)
-    c.line(x_start + margin, line_y, x_start + label_width - margin, line_y)
+    c.line(draw_area_x + margin, line_y, draw_area_x + draw_area_width - margin, line_y)
     
-    bottom_title_y = y_start + margin + 7*mm
-    bottom_data_y = y_start + margin + 2*mm
-    
-    c.setFont(font_regular, 8)
-    c.setFillColor(subtle_text_color)
-    c.drawString(x_start + margin, bottom_title_y, "Salud de Batería")
-    c.setFont(font_bold, 12)
-    c.setFillColor(text_color)
-    c.drawString(x_start + margin, bottom_data_y, data.get('battery_life', ''))
+    bottom_title_y = draw_area_y + margin + 7*mm
+    bottom_data_y = draw_area_y + margin + 2*mm
     
     c.setFont(font_regular, 8)
     c.setFillColor(subtle_text_color)
-    c.drawRightString(x_start + label_width - margin, bottom_title_y, "IMEI")
+    c.drawString(draw_area_x + margin, bottom_title_y, "Salud de Batería")
     c.setFont(font_bold, 12)
     c.setFillColor(text_color)
-    c.drawRightString(x_start + label_width - margin, bottom_data_y, data.get('imei', ''))
+    c.drawString(draw_area_x + margin, bottom_data_y, data.get('battery_life', ''))
+    
+    c.setFont(font_regular, 8)
+    c.setFillColor(subtle_text_color)
+    c.drawRightString(draw_area_x + draw_area_width - margin, bottom_title_y, "IMEI")
+    c.setFont(font_bold, 12)
+    c.setFillColor(text_color)
+    c.drawRightString(draw_area_x + draw_area_width - margin, bottom_data_y, data.get('imei', ''))
     
     c.setFont(EMOJI_FONT, 7)
     c.setFillColor(colors.HexColor("#008A00"))
-    c.drawCentredString(x_start + label_width/2, y_start + margin - 2*mm, "✅ Piezas Verificadas")
+    c.drawCentredString(draw_area_x + draw_area_width/2, draw_area_y + margin - 2*mm, "✅ Piezas Verificadas · Funciona Perfectamente")
     
     c.restoreState()
 
-# --- FUNCIÓN DE CREACIÓN DE IMAGEN ---
+# --- FUNCIÓN DE CREACIÓN Y ROTACIÓN DE IMAGEN ---
 def create_image_from_pdf(data, output_filepath):
     buffer = BytesIO()
-    label_width, label_height = 70 * mm, 40 * mm
-    c = canvas.Canvas(buffer, pagesize=(label_width, label_height))
+    canvas_width, canvas_height = 70 * mm, 40 * mm
+    c = canvas.Canvas(buffer, pagesize=(canvas_width, canvas_height))
     draw_label(c, 0, 0, data)
     c.save()
     buffer.seek(0)
+    
     images = convert_from_bytes(buffer.read(), dpi=300)
-    if images: images[0].save(output_filepath, 'PNG')
+    if images:
+        images[0].save(output_filepath, 'PNG')
+        with Image.open(output_filepath) as img:
+            rotated_img = img.rotate(90, expand=True, fillcolor='white')
+            rotated_img.save(output_filepath)
 
 # --- RUTAS DE LA APLICACIÓN WEB ---
 @app.route('/')
@@ -160,16 +180,13 @@ def parse_file():
     device_data = parse_3utools_report(txt_filepath)
     os.remove(txt_filepath)
     
-    if not device_data:
-        return jsonify({'error': 'No se pudo procesar el reporte.'}), 500
-    
+    if not device_data: return jsonify({'error': 'No se pudo procesar el reporte.'}), 500
     return jsonify(device_data)
 
 @app.route('/generate', methods=['POST'])
 def generate_image():
     data = request.json
-    if not data:
-        return jsonify({'error': 'No se recibieron datos para generar la etiqueta.'}), 400
+    if not data: return jsonify({'error': 'No se recibieron datos para generar la etiqueta.'}), 400
         
     unique_id = str(uuid.uuid4())
     image_filename = f"etiqueta_{unique_id}.png"
